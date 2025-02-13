@@ -13,7 +13,7 @@ enum Type {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-enum Expression {
+pub enum Expression {
     BINARY(Box<Expression>, Op, Box<Expression>),
     UNARY(Op, Box<Expression>),
     PAREN(Box<Expression>),
@@ -43,7 +43,7 @@ impl fmt::Debug for Expression {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Op {
+pub enum Op {
     PLUS,
     MINUS,
     MULT,
@@ -64,7 +64,7 @@ impl Op {
 }
 
 #[derive(Debug)]
-struct Parser<'a> {
+pub struct Parser<'a> {
     parse_stack: Vec<Type>,
     tokens: Peekable<Iter<'a, Token>>,
 }
@@ -80,7 +80,7 @@ struct Parser<'a> {
 //                | LPAREN EXPRESSION RPAREN
 //                | VALUE
 impl<'a> Parser<'a> {
-    fn new(tokens: &'a Vec<Token>) -> Parser<'a> {
+    pub fn new(tokens: &'a Vec<Token>) -> Parser<'a> {
         let a = tokens.iter();
         Parser {
             parse_stack: vec![],
@@ -189,7 +189,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn run(&mut self) -> &Expression {
+    pub fn run(&mut self) -> &Expression {
         let mut go = true;
         while go {
             let shifted = self.shift();

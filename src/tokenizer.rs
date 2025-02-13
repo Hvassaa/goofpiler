@@ -24,7 +24,7 @@ pub struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    fn new(source: &'a String) -> Tokenizer<'a> {
+    pub fn new(source: &'a String) -> Tokenizer<'a> {
         let source = source.chars().peekable();
         Tokenizer {
             source,
@@ -40,7 +40,7 @@ impl<'a> Tokenizer<'a> {
         self.source.peek()
     }
 
-    fn run(&mut self) -> &Vec<Token> {
+    pub fn run(&mut self) -> &Vec<Token> {
         match self.next() {
             Some(c) => {
                 match c {
