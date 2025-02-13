@@ -1,4 +1,4 @@
-use core::panic;
+use core::{fmt, panic};
 use std::{iter::Peekable, slice::Iter};
 
 use crate::tokenizer::Token;
@@ -12,7 +12,7 @@ enum Type {
     RPAREN,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Expression {
     BINARY(Box<Expression>, Op, Box<Expression>),
     UNARY(Op, Box<Expression>),
@@ -21,12 +21,34 @@ enum Expression {
     NIL,
 }
 
+impl fmt::Debug for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expression::BINARY(e1, op, e2) => {
+                let op = match op {
+                    Op::PLUS => "+",
+                    Op::MINUS => "-",
+                    Op::MULT => "*",
+                    Op::POW => "^",
+                    Op::DIV => "/",
+                };
+                write!(f, "({} {:?} {:?})", op, e1, e2)
+            }
+            Expression::LITERAL(v) => {
+                write!(f, "{}", v)
+            }
+            _ => write!(f, ""),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Op {
     PLUS,
     MINUS,
     MULT,
     DIV,
+    POW,
 }
 
 impl Op {
@@ -50,8 +72,11 @@ struct Parser<'a> {
 // TODO complete me
 // BNF
 // VALUE ::= LITERAL
-// OP ::= PLUS | MINUS | DIV | MULT
-// EXPRESSION ::= EXPRESSION OP EXPRESSION
+// OP_PREC_1 = PLUS | MINUS
+// OP_PREC_2 = MULT | DIV
+// EXPRESSION ::= EXPRESSION POW EXPRESSION
+//                | EXPRESSION OP_PREC_2 EXPRESSION
+//                | EXPRESSION OP_PREC_1 EXPRESSION
 //                | LPAREN EXPRESSION RPAREN
 //                | VALUE
 impl<'a> Parser<'a> {
@@ -67,10 +92,15 @@ impl<'a> Parser<'a> {
         match self.tokens.next() {
             Some(t) => {
                 match t {
-                    Token::LITERAL(v) => self.parse_stack.push(Type::LITERAL(*v)),
+                    // cheat and insert literal as expression immediatly
+                    Token::LITERAL(v) => self
+                        .parse_stack
+                        .push(Type::EXPRESSION(Expression::LITERAL(*v))),
                     Token::PLUS => self.parse_stack.push(Type::OP(Op::PLUS)),
+                    Token::MULT => self.parse_stack.push(Type::OP(Op::MULT)),
                     Token::LPAREN => self.parse_stack.push(Type::LPAREN),
                     Token::RPAREN => self.parse_stack.push(Type::RPAREN),
+                    Token::POW => self.parse_stack.push(Type::OP(Op::POW)),
                     _ => todo!(),
                 }
                 true
@@ -97,26 +127,40 @@ impl<'a> Parser<'a> {
         });
     }
 
+    fn check_precedence(&mut self) -> bool {
+        if self.parse_stack.len() < 2 {
+            return false;
+        }
+
+        let peek = self.tokens.peek();
+        let peek_precedence = match peek {
+            Some(Token::PLUS) | Some(Token::MINUS) => Some(1),
+            Some(Token::MULT) => Some(2),
+            Some(Token::POW) => Some(3),
+            _ => None,
+        };
+
+        let prev = self.parse_stack.get(self.parse_stack.len() - 2);
+
+        let prev_precedence = match prev {
+            Some(Type::OP(Op::PLUS)) | Some(Type::OP(Op::MINUS)) => Some(1),
+            Some(Type::OP(Op::MULT)) => Some(2),
+            Some(Type::OP(Op::POW)) => Some(3),
+            _ => None,
+        };
+
+        match (prev_precedence, peek_precedence) {
+            (None, _) | (_, None) => false,
+            (Some(prev), Some(peek)) => peek > prev,
+        }
+    }
+
     fn reduce(&mut self) -> bool {
-        // TODO just use last but cannot borrow as mutable already borrowed as imutable bla bla
-        let pop = self.parse_stack.pop();
-        if match pop {
-            Some(t) => match t {
-                // EXPRESSION ::= VALUE
-                Type::LITERAL(v) => {
-                    self.parse_stack
-                        .push(Type::EXPRESSION(Expression::LITERAL(v.clone())));
-                    true
-                }
-                // TODO remove when using last (reinserts the popped val)
-                v => {
-                    self.parse_stack.push(v);
-                    false
-                }
-            },
-            None => false,
-        } {
-            return true;
+        // TODO maybe check the last operator on the top level and compare precedence with the next
+        // reduce now if the incoming is lower, otherwise
+        // skip and shift
+        if self.check_precedence() {
+            return false;
         }
 
         if match self.peek_three() {
@@ -151,9 +195,7 @@ impl<'a> Parser<'a> {
             let shifted = self.shift();
             let reduced = self.reduce();
             let mut reduced_current = reduced;
-            dbg!("1");
             while reduced_current {
-                dbg!("2");
                 reduced_current = self.reduce();
             }
             go = shifted || reduced;
@@ -228,5 +270,140 @@ mod tests {
         let tokens = vec![Token::LPAREN, Token::LITERAL(15), Token::RPAREN];
         let result = Expression::PAREN(Box::new(Expression::LITERAL(15)));
         test(tokens, result);
+    }
+
+    #[test]
+    fn plus_then_mult() {
+        let tokens = vec![
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(15),
+            Token::MULT,
+            Token::LITERAL(10),
+        ];
+        let result = Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::PLUS,
+            Box::new(Expression::BINARY(
+                Box::new(Expression::LITERAL(15)),
+                Op::MULT,
+                Box::new(Expression::LITERAL(10)),
+            )),
+        );
+        test(tokens, result);
+    }
+
+    #[test]
+    fn plus_then_mult_then_mult() {
+        let tokens = vec![
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+        ];
+        let result = Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::PLUS,
+            Box::new(Expression::BINARY(
+                Box::new(Expression::BINARY(
+                    Box::new(Expression::LITERAL(10)),
+                    Op::MULT,
+                    Box::new(Expression::LITERAL(10)),
+                )),
+                Op::MULT,
+                Box::new(Expression::LITERAL(10)),
+            )),
+        );
+        test(tokens, result);
+    }
+
+    #[test]
+    fn plus_then_mult_then_plus() {
+        let tokens = vec![
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(10),
+        ];
+        let result = Expression::BINARY(
+            Box::new(Expression::BINARY(
+                Box::new(Expression::LITERAL(10)),
+                Op::PLUS,
+                Box::new(Expression::BINARY(
+                    Box::new(Expression::LITERAL(10)),
+                    Op::MULT,
+                    Box::new(Expression::LITERAL(10)),
+                )),
+            )),
+            Op::PLUS,
+            Box::new(Expression::LITERAL(10)),
+        );
+        test(tokens, result);
+    }
+
+    #[test]
+    fn mult_then_plus_then_mult() {
+        let tokens = vec![
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+        ];
+
+        let lhs = Box::new(Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::MULT,
+            Box::new(Expression::LITERAL(10)),
+        ));
+        let rhs = lhs.clone();
+
+        let result = Expression::BINARY(lhs, Op::PLUS, rhs);
+        test(tokens, result);
+    }
+
+    #[test]
+    fn plus_mult_pow_plus() {
+        let tokens = vec![
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(10),
+            Token::MULT,
+            Token::LITERAL(10),
+            Token::POW,
+            Token::LITERAL(10),
+            Token::PLUS,
+            Token::LITERAL(99),
+        ];
+
+        let pow = Box::new(Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::POW,
+            Box::new(Expression::LITERAL(10)),
+        ));
+
+        let mult = Box::new(Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::MULT,
+            pow,
+        ));
+
+        let first_plus = Box::new(Expression::BINARY(
+            Box::new(Expression::LITERAL(10)),
+            Op::PLUS,
+            mult,
+        ));
+
+        let last_plus = Expression::BINARY(first_plus, Op::PLUS, Box::new(Expression::LITERAL(99)));
+
+        test(tokens, last_plus);
     }
 }

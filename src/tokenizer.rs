@@ -15,6 +15,7 @@ pub enum Token {
     LEQ,
     LPAREN,
     RPAREN,
+    POW,
 }
 
 pub struct Tokenizer<'a> {
@@ -49,6 +50,7 @@ impl<'a> Tokenizer<'a> {
                     '/' => self.tokens.push(Token::DIV),
                     '(' => self.tokens.push(Token::LPAREN),
                     ')' => self.tokens.push(Token::RPAREN),
+                    '^' => self.tokens.push(Token::POW),
                     '>' => {
                         if self.peek().is_some() && *self.peek().unwrap() == '=' {
                             self.tokens.push(Token::GEQ);
