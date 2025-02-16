@@ -1,4 +1,5 @@
 mod parser;
+mod pratt;
 mod resolver;
 mod tokenizer;
 
