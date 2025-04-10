@@ -9,6 +9,11 @@ pub enum E {
     UNARY(OP, Box<E>),
     BINARY(Box<E>, OP, Box<E>),
     PAREN(Box<E>),
+    IF(Box<E>, Box<E>, Box<E>)
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum S {
 }
 
 impl fmt::Debug for E {
@@ -18,6 +23,7 @@ impl fmt::Debug for E {
             Self::UNARY(op, v) => write!(f, "({:?} {:?})", op, v),
             Self::BINARY(v1, op, v2) => write!(f, "({:?} {:?} {:?})", op, v1, v2),
             Self::PAREN(v) => write!(f, "({:?})", v),
+            Self::IF(cond, then, elze) => write!(f, "(if {:?} {:?} {:?}", cond, then, elze),
         }
     }
 }
@@ -57,6 +63,14 @@ fn nud(tokens: &mut Peekable<Iter<Token>>) -> E {
             tokens.next();
             e
         }
+        Token::IF => {
+            let cond = Box::new(expression(tokens, 1));
+            assert!(*tokens.next().unwrap() == Token::THEN);
+            let then = Box::new(expression(tokens, 1));
+            assert!(*tokens.next().unwrap() == Token::ELSE);
+            let elze = Box::new(expression(tokens, 1));
+            E::IF(cond, then, elze)
+        }
         _ => panic!(),
     }
 }
@@ -83,6 +97,7 @@ pub fn bp(token: &Token) -> u8 {
             _ => todo!(),
         },
         Token::RPAREN => 0, // TODO should this be "lower" than initial?
+        Token::THEN | Token::ELSE => 0,
         _ => todo!(),
     }
 }
@@ -190,5 +205,25 @@ mod tests {
         let bin = Box::new(E::BINARY(mult, OP::PLUS, lit.clone()));
         let bin = E::BINARY(lit, OP::PLUS, bin);
         assert_eq!(bin, result);
+    }
+
+    #[test]
+    fn if_test() {
+        let tok_lit = Token::LITERAL(1);
+        let tokens = vec![
+            Token::IF,
+            tok_lit.clone(),
+            Token::THEN,
+            tok_lit.clone(),
+            Token::ELSE,
+            Token::LITERAL(2)
+        ];
+        let mut iter = tokens.iter().peekable();
+        let result = expression(&mut iter, 0);
+        let cond = Box::new(E::LITERAL(1));
+        let then = Box::new(E::LITERAL(1));
+        let elze = Box::new(E::LITERAL(2));
+        let if_exp = E::IF(cond, then, elze);
+        assert_eq!(if_exp, result);
     }
 }

@@ -18,9 +18,13 @@ pub enum OP {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     LITERAL(u32),
+    BOOL(bool),
     OPERATOR(OP),
     LPAREN,
     RPAREN,
+    IF,
+    THEN,
+    ELSE
 }
 
 pub struct Tokenizer<'a> {
@@ -54,6 +58,38 @@ impl<'a> Tokenizer<'a> {
                     '*' => self.tokens.push(Token::OPERATOR(OP::MULT)),
                     '/' => self.tokens.push(Token::OPERATOR(OP::DIV)),
                     '^' => self.tokens.push(Token::OPERATOR(OP::POW)),
+                    '|' => self.tokens.push(Token::THEN),
+                    't' => {
+                        let next = vec!['r', 'u', 'e'];
+                        if next.iter().all(|c| *c == self.next().unwrap()) {
+                            self.tokens.push(Token::BOOL(true));
+                        } else {
+                            panic!("Malformed true");
+                        }
+                    }
+                    'f' => {
+                        let next = vec!['a', 'l', 's', 'e'];
+                        if next.iter().all(|c| *c == self.next().unwrap()) {
+                            self.tokens.push(Token::BOOL(false));
+                        } else {
+                            panic!("Malformed false");
+                        }
+                    }
+                    'i' => {
+                        if self.next().unwrap() == 'f' {
+                            self.tokens.push(Token::IF);
+                        } else {
+                            panic!("Malformed if");
+                        }
+                    }
+                    'e' => {
+                        let next = vec!['l', 's', 'e'];
+                        if next.iter().all(|c| *c == self.next().unwrap()) {
+                            self.tokens.push(Token::ELSE);
+                        } else {
+                            panic!("Malformed else");
+                        }
+                    }
                     '>' => {
                         if self.peek().is_some() && *self.peek().unwrap() == '=' {
                             self.tokens.push(Token::OPERATOR(OP::GEQ));
@@ -200,5 +236,13 @@ mod tests {
             Token::RPAREN,
         ];
         test("(2 + 5)", expected);
+    }
+
+    #[test]
+    fn parse_true() {
+        let expected = vec![
+            Token::BOOL(true)
+        ];
+        test("true", expected);
     }
 }
